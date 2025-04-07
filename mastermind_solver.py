@@ -1,9 +1,10 @@
-from dataclasses import dataclass, field
 import itertools
 import random
 from operadores_logicos import *
 import time
+import sys
 from typing import List, Tuple, Set, Dict, Optional
+from dataclasses import dataclass, field
 
 COLORES = ["azul", "rojo", "blanco", "negro", "verde", "purpura"]
 
@@ -24,10 +25,22 @@ class MastermindKB:
     def actualizar_con_feedback(self, combinacion: Tuple[str, str, str, str], 
                               posiciones_correctas: int, 
                               colores_correctos: int) -> None:
+        if posiciones_correctas + colores_correctos > 4:
+            print("\nADVERTENCIA: Feedback inválido. La suma de posiciones correctas y")
+            print("colores correctos no puede ser mayor que 4.")
+            return
+        
         nuevas_combinaciones = set()
         for candidato in self.combinaciones_posibles:
             if self._coincide_feedback(combinacion, candidato, posiciones_correctas, colores_correctos):
                 nuevas_combinaciones.add(candidato)
+        
+        if not nuevas_combinaciones and self.combinaciones_posibles:
+            print("\nADVERTENCIA: No hay combinaciones que coincidan con el feedback proporcionado.")
+            print(f"Feedback recibido: {posiciones_correctas} posiciones correctas, {colores_correctos} colores correctos")
+            print("Es posible que haya un error en el feedback ingresado.")
+            
+            return
         
         self.combinaciones_posibles = nuevas_combinaciones
         
@@ -37,17 +50,18 @@ class MastermindKB:
                           combinacion2: Tuple[str, str, str, str], 
                           posiciones_correctas: int, 
                           colores_correctos: int) -> bool:
-        pos_correctas = sum(1 for i in range(4) if combinacion1[i] == combinacion2[i])
+        counter1 = {color: 0 for color in COLORES}
+        counter2 = {color: 0 for color in COLORES}
         
-        color_count1 = {color: 0 for color in COLORES}
-        color_count2 = {color: 0 for color in COLORES}
-        
+        pos_correctas = 0
         for i in range(4):
-            if combinacion1[i] != combinacion2[i]:
-                color_count1[combinacion1[i]] += 1
-                color_count2[combinacion2[i]] += 1
+            if combinacion1[i] == combinacion2[i]:
+                pos_correctas += 1
+            else:
+                counter1[combinacion1[i]] += 1
+                counter2[combinacion2[i]] += 1
         
-        colores_comunes = sum(min(color_count1[color], color_count2[color]) for color in COLORES)
+        colores_comunes = sum(min(counter1[color], counter2[color]) for color in COLORES)
         
         return pos_correctas == posiciones_correctas and colores_comunes == colores_correctos
     
@@ -58,7 +72,11 @@ class MastermindKB:
         
     def siguiente_combinacion(self) -> Tuple[str, str, str, str]:
         if not self.combinaciones_posibles:
-            raise Exception("No hay combinaciones posibles restantes")
+            print("\nADVERTENCIA: No hay combinaciones posibles restantes.")
+            print("Esto puede deberse a un feedback inconsistente o a un error en el cálculo.")
+            print("Reiniciando con una combinación aleatoria...\n")
+            
+            return tuple(random.choice(COLORES) for _ in range(4))
         
         if len(self.combinaciones_posibles) == len(self.todas_combinaciones):
             return ("azul", "azul", "rojo", "verde")
@@ -69,7 +87,6 @@ class MastermindKB:
         if len(self.combinaciones_posibles) <= 10:
             return random.choice(list(self.combinaciones_posibles))
         
-
         combinaciones_a_evaluar = random.sample(
             list(self.combinaciones_posibles) if len(self.combinaciones_posibles) <= 50 
             else list(self.todas_combinaciones),
@@ -86,17 +103,18 @@ class MastermindKB:
             
             for candidato in random.sample(list(self.combinaciones_posibles), 
                                           min(50, len(self.combinaciones_posibles))):
-                pos_correctas = sum(1 for i in range(4) if combinacion[i] == candidato[i])
-                
-                color_count1 = {color: 0 for color in COLORES}
-                color_count2 = {color: 0 for color in COLORES}
+                pos_correctas = 0
+                counter1 = {color: 0 for color in COLORES}
+                counter2 = {color: 0 for color in COLORES}
                 
                 for i in range(4):
-                    if combinacion[i] != candidato[i]:
-                        color_count1[combinacion[i]] += 1
-                        color_count2[candidato[i]] += 1
+                    if combinacion[i] == candidato[i]:
+                        pos_correctas += 1
+                    else:
+                        counter1[combinacion[i]] += 1
+                        counter2[candidato[i]] += 1
                 
-                colores_comunes = sum(min(color_count1[color], color_count2[color]) for color in COLORES)
+                colores_comunes = sum(min(counter1[color], counter2[color]) for color in COLORES)
                 
                 feedback = (pos_correctas, colores_comunes)
                 if feedback not in resultados:
@@ -109,6 +127,9 @@ class MastermindKB:
                 mejor_puntuacion = max_conjunto_restante
                 mejor_combinacion = combinacion
         
+        if mejor_combinacion is None:
+            return random.choice(list(self.combinaciones_posibles))
+        
         return mejor_combinacion
     
     def tamano_espacio_busqueda(self) -> int:
@@ -116,24 +137,24 @@ class MastermindKB:
 
 @dataclass
 class MastermindSolver:
-
     kb: MastermindKB = field(default_factory=MastermindKB)
     intentos: int = 0
     historia_espacio_busqueda: List[int] = field(default_factory=list)
     
     def evaluar_combinacion(self, combinacion: Tuple[str, str, str, str], 
                            combinacion_secreta: Tuple[str, str, str, str]) -> Tuple[int, int]:
-        pos_correctas = sum(1 for i in range(4) if combinacion[i] == combinacion_secreta[i])
+        counter1 = {color: 0 for color in COLORES}
+        counter2 = {color: 0 for color in COLORES}
         
-        color_count1 = {color: 0 for color in COLORES}
-        color_count2 = {color: 0 for color in COLORES}
-        
+        pos_correctas = 0
         for i in range(4):
-            if combinacion[i] != combinacion_secreta[i]:
-                color_count1[combinacion[i]] += 1
-                color_count2[combinacion_secreta[i]] += 1
+            if combinacion[i] == combinacion_secreta[i]:
+                pos_correctas += 1
+            else:
+                counter1[combinacion[i]] += 1
+                counter2[combinacion_secreta[i]] += 1
         
-        colores_comunes = sum(min(color_count1[color], color_count2[color]) for color in COLORES)
+        colores_comunes = sum(min(counter1[color], counter2[color]) for color in COLORES)
         
         return (pos_correctas, colores_comunes)
     
@@ -159,7 +180,6 @@ class MastermindSolver:
             self.historia_espacio_busqueda.append(self.kb.tamano_espacio_busqueda())
     
     def modo_tiempo_real(self) -> int:
-
         self.kb = MastermindKB()
         self.intentos = 0
         self.historia_espacio_busqueda = [self.kb.tamano_espacio_busqueda()]
@@ -167,7 +187,7 @@ class MastermindSolver:
         print("¡Bienvenido al solucionador de Mastermind!")
         print("Piensa en una combinación secreta de 4 fichas con los siguientes colores:")
         print(", ".join(COLORES))
-        print("Se responderan con mis propuestas y tú me darás retroalimentación.")
+        print("Responderé con mis propuestas y tú me darás retroalimentación.")
         print()
         
         while True:
@@ -271,7 +291,7 @@ def main():
         for i, tamano in enumerate(historia):
             print(f"Después del intento {i}: {tamano} combinaciones posibles")
     
-    else: 
+    else:
         print("\n=== MODO EN TIEMPO REAL ===")
         solver.modo_tiempo_real()
 
